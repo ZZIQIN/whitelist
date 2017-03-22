@@ -312,7 +312,7 @@ void stopWhitelist(){
     free(config.logfile);
     config.white_file=NULL;
     config.logfile=NULL;
-    last_modification=0
+    last_modification=0;
     initialized=0;
     pthread_mutex_unlock(&mlock);
 }
