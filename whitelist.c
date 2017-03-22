@@ -41,13 +41,13 @@ struct wl_config {
     int syslog_enabled;
 };
 
-uint32_t wl_num_tag = (1 << (sizeof(uint32_t) * 8 - WL_TAG_BITS)) | 0;
-time_t last_modification = 0;
+static uint32_t wl_num_tag = (1 << (sizeof(uint32_t) * 8 - WL_TAG_BITS)) | 0;
+static time_t last_modification = 0;
 struct redisWhitelist redis_w_list;	// connect白名单
 
 static pthread_mutex_t mlock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t thread_id;    //白名单更新线程
-int initialized=0;
+static int initialized=0;
 
 struct wl_config config;
 static void* intervalGetWhitelist(void* arg);
