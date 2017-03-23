@@ -21,8 +21,7 @@
 #define PERM_NONE     0
 #define PERM_R        1
 #define PERM_W        2
-#define PERM_RW       3
-
+#define PERM_RW       3 //代表拥有读权限或写权限，非同时拥有
 #define REDIS_DEBUG 0
 #define REDIS_VERBOSE 1
 #define REDIS_NOTICE 2
