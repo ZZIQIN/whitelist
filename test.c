@@ -27,6 +27,9 @@ int main() {
     TEST("192.168.1.1",PERM_RW,1);
     TEST("192.168.1.1",PERM_R,1);
     TEST("192.168.1.1",PERM_W,-1);
+    TEST("123.123.123.123",PERM_R,-1);
+    TEST("123.123.123.123",PERM_RW,-1);
+    TEST("123.123.123.123",PERM_W,-1);
     printf("pass!");
     return 0;
 }
