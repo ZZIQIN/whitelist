@@ -5,5 +5,6 @@ set(CMAKE_C_STANDARD 11)
 find_package (Threads)
 add_executable(server server.c whitelist.c)
 add_executable(client client.c)
-
+add_executable(ut test.c whitelist.c)
 target_link_libraries(server pthread)
+target_link_libraries(ut pthread)
