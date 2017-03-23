@@ -8,15 +8,14 @@
 #include <signal.h>
 #include <sys/time.h>
 #include <sys/syslog.h>
+#include <stdarg.h>
+#include <errno.h>
+
 
 #define WHITELIST_MAX_NUMS 10000
 #define WL_TAG_BITS			1
 
-#define REDIS_DEBUG 0
-#define REDIS_VERBOSE 1
-#define REDIS_NOTICE 2
-#define REDIS_WARNING 3
-#define REDIS_LOG_RAW (1<<10)
+
 
 #define REDIS_MAX_LOGMSG_LEN    1024
 
@@ -59,13 +58,22 @@ static int compare(const void *a,const void *b) {
     return *(uint32_t *)b - *(uint32_t *)a;
 }
 
-int findWhitelist(int fd, int type) {
+int findWhitelistByFd(int fd,int type){
     socklen_t addr_len = sizeof(struct sockaddr_in);
 
     struct sockaddr sa;
-    getpeername(fd,&sa,&addr_len);
-    uint32_t ip_to_num = inet_network(inet_ntoa(((struct sockaddr_in *)&sa)->sin_addr));
+    int err=errno;
+    if(getpeername(fd,&sa,&addr_len)){
+        redisLog(REDIS_NOTICE,"fd %d is invalid",fd);
+        errno=err;
+        return -1;
+    }
+    return findWhitelist((struct sockaddr_in*)&sa,type);
+}
 
+int findWhitelist(struct sockaddr_in *sa, int type) {
+    if(!sa) return -1;
+    uint32_t ip_to_num = inet_network(inet_ntoa(sa->sin_addr));
     int ret = 0;
     ret = binarySearch(ip_to_num, type);
     if(ret == -1) {
@@ -114,14 +122,15 @@ void whitelistJob() {
 
 void* intervalGetWhitelist(void* arg) {
     int err = 0;
-
     while(1) {
         if (config.whitelist_switch == WHITELIST_ON){
             err = _intervalGetWhitelist(arg, CONN_WL_UPDATE);
             if (err == -1) {
                 redisLog(REDIS_WARNING,"whitelist update failed!");
             }
-            sleep(2);
+            if (config.whitelist_switch == WHITELIST_ON){
+                sleep(2);
+            }
         }
         else{
             break;
@@ -280,23 +289,30 @@ void redisLog(int level, const char *fmt, ...) {
 
     redisLogRaw(level,msg);
 }
-void startWhitelist(const char *white_file, const char *logfile, int verbosity, int enable_log){
+void startWhitelist(const char *white_file, const char *logfile, int verbosity, int enable_syslog){
     pthread_mutex_lock(&mlock);
-    if(initialized)
+    if(initialized){
+        pthread_mutex_unlock(&mlock);
         return;
+    }
     config.verbosity=verbosity;
-    config.syslog_enabled=enable_log;
+    config.syslog_enabled=enable_syslog;
     if(white_file){
         config.white_file=(char*)malloc(strlen(white_file+1));
         strcpy(config.white_file,white_file);
     }else{
         config.white_file=NULL;
     }
+    char* oldlogfile=config.logfile;
     if(logfile){
-        config.logfile=(char*)malloc(strlen(logfile+1));
-        strcpy(config.logfile,logfile);
+        char* newlogfile=(char*)malloc(strlen(logfile+1));
+        strcpy(newlogfile,logfile);
+        config.logfile=newlogfile;
     }else{
         config.logfile=NULL;
+    }
+    if(oldlogfile){
+        free(oldlogfile);
     }
     config.whitelist_switch=WHITELIST_ON;
     whitelistJob();
@@ -305,13 +321,14 @@ void startWhitelist(const char *white_file, const char *logfile, int verbosity, 
 }
 void stopWhitelist(){
     pthread_mutex_lock(&mlock);
-    if(!initialized) return;
+    if(!initialized){
+        pthread_mutex_unlock(&mlock);
+        return;
+    }
     config.whitelist_switch=WHITELIST_OFF;
     pthread_join(thread_id,NULL);
     free(config.white_file);
-    free(config.logfile);
     config.white_file=NULL;
-    config.logfile=NULL;
     last_modification=0;
     initialized=0;
     pthread_mutex_unlock(&mlock);
