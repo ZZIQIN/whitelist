@@ -298,14 +298,14 @@ void startWhitelist(const char *white_file, const char *logfile, int verbosity, 
     config.verbosity=verbosity;
     config.syslog_enabled=enable_syslog;
     if(white_file){
-        config.white_file=(char*)malloc(strlen(white_file+1));
+        config.white_file=(char*)malloc(strlen(white_file)+1);
         strcpy(config.white_file,white_file);
     }else{
         config.white_file=NULL;
     }
     char* oldlogfile=config.logfile;
     if(logfile){
-        char* newlogfile=(char*)malloc(strlen(logfile+1));
+        char* newlogfile=(char*)malloc(strlen(logfile)+1);
         strcpy(newlogfile,logfile);
         config.logfile=newlogfile;
     }else{
