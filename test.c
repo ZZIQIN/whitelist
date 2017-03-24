@@ -8,13 +8,11 @@
 #include <unistd.h>
 #include <assert.h>
 
-struct sockaddr_in addr;
+
 #define TEST(IP, TYPE, OUTCOME)\
  do{\
-    bzero(&addr,sizeof(addr));\
-    addr.sin_family=AF_INET;\
-    addr.sin_port=htons(23);\
-    addr.sin_addr.s_addr=inet_addr(IP);\
+    struct sockaddr_in addr;\
+    inet_pton(AF_INET, IP, &addr.sin_addr);\
     assert(findWhitelist(&addr,TYPE)==OUTCOME);\
 }while(0);
 

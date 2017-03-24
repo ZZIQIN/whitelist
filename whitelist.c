@@ -77,7 +77,7 @@ int findWhitelist(struct sockaddr_in *sa, int type) {
     int ret = 0;
     ret = binarySearch(ip_to_num, type);
     if(ret == -1) {
-        redisLog(REDIS_NOTICE,"ip %s is forbidden.",(inet_ntoa(((struct sockaddr_in *)&sa)->sin_addr)));
+        redisLog(REDIS_NOTICE,"ip %s is forbidden.",(inet_ntoa(sa->sin_addr)));
     }
     return ret;
 }
