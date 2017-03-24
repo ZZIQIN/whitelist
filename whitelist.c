@@ -45,6 +45,7 @@ static time_t last_modification = 0;
 struct redisWhitelist redis_w_list;	// connect白名单
 
 static pthread_mutex_t mlock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;
 static pthread_t thread_id;    //白名单更新线程
 static int initialized=0;
 
@@ -254,8 +255,9 @@ void redisLogRaw(int level, const char *msg) {
 
     level &= 0xff; /* clear flags */
     if (level < config.verbosity) return;
-
+    pthread_rwlock_rdlock(&rwlock);
     fp = (config.logfile == NULL) ? stdout : fopen(config.logfile,"a");
+    pthread_rwlock_unlock(&rwlock);
     if (!fp) return;
 
     if (rawmode) {
@@ -271,7 +273,7 @@ void redisLogRaw(int level, const char *msg) {
     }
     fflush(fp);
 
-    if (config.logfile) fclose(fp);
+    if (fp!=stdout) fclose(fp);
 
     if (config.syslog_enabled) syslog(syslogLevelMap[level], "%s", msg);
 }
@@ -303,6 +305,7 @@ void startWhitelist(const char *white_file, const char *logfile, int verbosity, 
     }else{
         config.white_file=NULL;
     }
+    pthread_rwlock_wrlock(&rwlock);
     char* oldlogfile=config.logfile;
     if(logfile){
         char* newlogfile=(char*)malloc(strlen(logfile)+1);
@@ -314,6 +317,7 @@ void startWhitelist(const char *white_file, const char *logfile, int verbosity, 
     if(oldlogfile){
         free(oldlogfile);
     }
+    pthread_rwlock_unlock(&rwlock);
     config.whitelist_switch=WHITELIST_ON;
     whitelistJob();
     initialized=1;
