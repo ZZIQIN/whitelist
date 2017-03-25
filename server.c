@@ -1,11 +1,7 @@
 #include"whitelist.h"
-#include <stdio.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <time.h>
+
 #include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
+
 	
 int main(int argc, char **argv)  
 {  
@@ -64,12 +60,6 @@ int main(int argc, char **argv)
             printf("accept error! \n");  
             exit(1);              
         }
-	    stopWhitelist();
-        stopWhitelist();
-        stopWhitelist();
-	    startWhitelist("ip.txt","log.txt",0,0);
-        startWhitelist("ip.txt","log.txt",0,0);
-        startWhitelist("ip.txt","log.txt",0,0);
     }  
     return 0;
 }
