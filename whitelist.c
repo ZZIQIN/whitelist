@@ -213,8 +213,7 @@ void whitelistJob() {
 
 void *intervalGetWhitelist(void *arg) {
     int err = 0;
-    struct timeval now;
-    struct timespec outtime;
+    struct timespec outtime = {0};
     pthread_mutex_lock(&tlock);
     while (1) {
         if (config.whitelist_switch == WHITELIST_ON) {
@@ -222,9 +221,9 @@ void *intervalGetWhitelist(void *arg) {
             if (err == -1) {
                 redisLog(REDIS_WARNING, "whitelist update failed!");
             }
-            gettimeofday(&now,NULL);
-            outtime.tv_sec = now.tv_sec + 2;
+            outtime.tv_sec = time(0) + 2;
             pthread_cond_timedwait(&cond, &tlock, &outtime);
+
         } else {
             pthread_mutex_unlock(&tlock);
             break;
@@ -329,8 +328,8 @@ int _intervalGetWhitelist(void *arg, int type) {
                     }
                     char perm = get_perm(++ptr);
 
-                    permPointer[(bits-1)*2+next_tag][cnt[bits - 1]].perm = perm;
-                    permPointer[(bits-1)*2+next_tag][cnt[bits - 1]].ip = ip;
+                    permPointer[(bits - 1) * 2 + next_tag][cnt[bits - 1]].perm = perm;
+                    permPointer[(bits - 1) * 2 + next_tag][cnt[bits - 1]].ip = ip;
                     ++cnt[bits - 1];
 //                    redisLog(REDIS_NOTICE, "ip: %s num:%u, bits %d %d ,", buf,ip, bits,bits*2-(1-next_tag)-1);
                     redisLog(REDIS_NOTICE, "ip: %s, perm str: %s, perm:%d", buf, ptr, perm);
@@ -345,7 +344,7 @@ int _intervalGetWhitelist(void *arg, int type) {
                 wl_num_tag[i] = wl_num_tag_temp;
             }
             for (int i = 0; i < 32; ++i) {
-                if(!cnt[i]) continue;
+                if (!cnt[i]) continue;
                 redisLog(REDIS_NOTICE, "whitelist [%s] updated, ip bits %d ,tag: %d, elements_num:%d", file_name, i + 1,
                          next_tag, cnt[i]);
             }
