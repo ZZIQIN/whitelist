@@ -121,12 +121,14 @@ struct wl_config {
     int syslog_enabled;
 };
 
-static uint32_t wl_num_tag[32] ={0};
+static uint32_t wl_num_tag[32] = {0};
 static time_t last_modification = 0;
 //struct redisWhitelist redis_w_list;    // connect白名单
 
 static pthread_mutex_t mlock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;
+static pthread_mutex_t tlock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 static pthread_t thread_id;    //白名单更新线程
 static int initialized = 0;
 
@@ -177,13 +179,14 @@ int binarySearch(uint32_t num, int type) {
     int whitelist_tag = -1;
     int whitelist_element_num = -1;
     perm_t *w_list = NULL;
-    for(int i=32;i>=1;--i){
-        uint32_t tag=wl_num_tag[i-1];
+    for (int i = 32; i >= 1; --i) {
+        uint32_t tag = wl_num_tag[i - 1];
         whitelist_tag = tag >> (sizeof(uint32_t) * 8 - WL_TAG_BITS);
         whitelist_element_num = (tag << WL_TAG_BITS) >> WL_TAG_BITS;
-        w_list=permPointer[i*2-2+whitelist_tag];
-        uint32_t  temp=num&(~((1<<(32-i))-1));
-        void *hit = bsearch((const void *) &temp, (const void *) w_list, whitelist_element_num, sizeof(perm_t), compare);
+        w_list = permPointer[i * 2 - 2 + whitelist_tag];
+        uint32_t temp = num & (~((1 << (32 - i)) - 1));
+        void *hit = bsearch((const void *) &temp, (const void *) w_list, whitelist_element_num, sizeof(perm_t),
+                            compare);
         if (hit) {
             perm_t *permt = (perm_t *) hit;
             if (permt->perm & type) {
@@ -210,16 +213,20 @@ void whitelistJob() {
 
 void *intervalGetWhitelist(void *arg) {
     int err = 0;
+    struct timeval now;
+    struct timespec outtime;
+    pthread_mutex_lock(&tlock);
     while (1) {
         if (config.whitelist_switch == WHITELIST_ON) {
             err = _intervalGetWhitelist(arg, CONN_WL_UPDATE);
             if (err == -1) {
                 redisLog(REDIS_WARNING, "whitelist update failed!");
             }
-            if (config.whitelist_switch == WHITELIST_ON) {
-                sleep(2);
-            }
+            gettimeofday(&now,NULL);
+            outtime.tv_sec = now.tv_sec + 2;
+            pthread_cond_timedwait(&cond, &tlock, &outtime);
         } else {
+            pthread_mutex_unlock(&tlock);
             break;
         }
     }
@@ -311,33 +318,36 @@ int _intervalGetWhitelist(void *arg, int type) {
                     continue;
                 } else {
                     *ptr = '\0';
-                    if( !try_parse_v4_netmask(buf,&ip,&bits)){
-                        redisLog(REDIS_WARNING, "configure bad format %s",buf);
+                    if (!try_parse_v4_netmask(buf, &ip, &bits)) {
+                        redisLog(REDIS_WARNING, "configure bad format %s", buf);
                         continue;
                     }
-                    if(cnt[bits-1]>=whitelistMax[bits]){
+                    if (cnt[bits - 1] >= whitelistMax[bits]) {
                         redisLog(REDIS_WARNING, "the number of ip in file [%s] is more than iplist_max, [max:%d]",
                                  file_name, whitelistMax[bits]);
                         break;
                     }
                     char perm = get_perm(++ptr);
-                    permPointer[bits*2-(1-next_tag)-1][cnt[bits-1]].perm = perm;
-                    permPointer[bits*2-(1-next_tag)-1][cnt[bits-1]].ip=ip;
-                    ++cnt[bits-1];
+
+                    permPointer[(bits-1)*2+next_tag][cnt[bits - 1]].perm = perm;
+                    permPointer[(bits-1)*2+next_tag][cnt[bits - 1]].ip = ip;
+                    ++cnt[bits - 1];
 //                    redisLog(REDIS_NOTICE, "ip: %s num:%u, bits %d %d ,", buf,ip, bits,bits*2-(1-next_tag)-1);
                     redisLog(REDIS_NOTICE, "ip: %s, perm str: %s, perm:%d", buf, ptr, perm);
                 }
             }
             fclose(white_list_fd);
-            for(int i=0;i<32;++i){
-                qsort(permPointer[i*2+next_tag],cnt[i],sizeof(perm_t),compare);
+            for (int i = 0; i < 32; ++i) {
+                qsort(permPointer[i * 2 + next_tag], cnt[i], sizeof(perm_t), compare);
             }
-            for(int i=31;i>=0;--i){
+            for (int i = 31; i >= 0; --i) {
                 wl_num_tag_temp = (next_tag << (sizeof(uint32_t) * 8 - WL_TAG_BITS)) | cnt[i];
                 wl_num_tag[i] = wl_num_tag_temp;
             }
-            for(int i=0;i<32;++i){
-                redisLog(REDIS_NOTICE, "whitelist [%s] updated, ip bits %d ,tag: %d, elements_num:%d", file_name,i+1, next_tag, cnt[i]);
+            for (int i = 0; i < 32; ++i) {
+                if(!cnt[i]) continue;
+                redisLog(REDIS_NOTICE, "whitelist [%s] updated, ip bits %d ,tag: %d, elements_num:%d", file_name, i + 1,
+                         next_tag, cnt[i]);
             }
         }
 
@@ -431,7 +441,12 @@ void stopWhitelist() {
         return;
     }
     config.whitelist_switch = WHITELIST_OFF;
+
+    pthread_mutex_lock(&tlock); //确保更新线程在休眠
+    pthread_cond_signal(&cond);
+    pthread_mutex_unlock(&tlock);
     pthread_join(thread_id, NULL);
+
     free(config.white_file);
     config.white_file = NULL;
     last_modification = 0;
